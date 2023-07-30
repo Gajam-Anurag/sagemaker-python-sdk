@@ -65,7 +65,7 @@ required_packages = [
     "tblib==1.7.0",
     "kaleido>=0.2.1",
     "pillow==9.5.0",
-    "matplotlib",
+    "matplotlib<=3.4.3",
     "plotly==5.15.0"
 ]
 
