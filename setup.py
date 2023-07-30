@@ -63,6 +63,10 @@ required_packages = [
     "jsonschema",
     "platformdirs",
     "tblib==1.7.0",
+    "kaleido>=0.2.1",
+    "pillow==9.5.0",
+    "matplotlib",
+    "plotly==5.15.0"
 ]
 
 # Specific use case dependencies

@@ -19,6 +19,12 @@ import time
 
 import pytest
 
+import numpy as np
+from PIL import Image
+import matplotlib
+import plotly.express as px
+import pandas as pd
+
 from tests.conftest import CUSTOM_S3_OBJECT_KEY_PREFIX
 from tests.integ.sagemaker.experiments.conftest import TAGS
 from sagemaker.experiments._api_types import _TrialComponentStatusType
@@ -744,6 +750,26 @@ def _local_run_log_behaviors(
             run.log_file(file_path=artifact_file_path, name=file_artifact_name)
             run.log_artifact(name=artifact_name, value="s3://Output")
             run.log_artifact(name=artifact_name, value="s3://Input", is_output=False)
+
+            ndarray = np.random.randint(0,256, (100,100,3), dtype=np.uint8)
+            run.log_image(ndarray, 'ndarray_artifact.png', is_output=False)
+
+            pil_image = Image.fromarray(ndarray)
+            run.log_image(pil_image, 'pil_image_artifact.png')
+
+            fig1 = px.line(x=["a","b","c"], y=[1,3,2], title="sample figure")
+            run.log_figure(fig1, 'plotly_artifact.png', is_output=False)
+
+            run.log_text("Logged text artifact storing in the text format", "artifact_text.txt" ,is_output=False)
+
+            df = pd.DataFrame([["a", "b"], ["c", "d"]], index=["row 1", "row 2"], columns=["col 1", "col 2"])
+            run.log_table(df, 'dataframe_artifact.json', is_output=False)
+
+            param_grid = {'n_estimators': [50, 100, 150], 'max_depth': [None, 5, 10], 'min_samples_split': [2, 4, 6], }
+            run.log_table(param_grid, 'param_grid.json')
+
+            model_config = { "model_type": "Random Forest", "parameters": { "n_estimators": 100, "max_depth": 5 }}
+            run.log_dict(model_config, 'model_config.yaml', is_output=False)
 
             for i in range(BATCH_SIZE):
                 run.log_metric(name=metric_name, value=i, step=i)
