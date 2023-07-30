@@ -21,6 +21,12 @@ import urllib
 from functools import wraps
 from typing import Optional
 
+import numpy
+import PIL.Image
+import matplotlib.figure
+import plotly.graph_objects
+import pandas
+
 from sagemaker import Session
 from sagemaker.apiutils import _utils
 from sagemaker.experiments._environment import _RunEnvironment, _EnvironmentType
@@ -103,8 +109,8 @@ def is_already_exist_error(error):
 
 
 def get_tc_and_exp_config_from_job_env(
-    environment: _RunEnvironment,
-    sagemaker_session: Session,
+        environment: _RunEnvironment,
+        sagemaker_session: Session,
 ) -> dict:
     """Retrieve an experiment config from the job environment.
 
@@ -144,8 +150,8 @@ def get_tc_and_exp_config_from_job_env(
 
 
 def verify_load_input_names(
-    run_name: Optional[str] = None,
-    experiment_name: Optional[str] = None,
+        run_name: Optional[str] = None,
+        experiment_name: Optional[str] = None,
 ):
     """Verify the run_name and the experiment_name inputs in load_run.
 
@@ -214,3 +220,147 @@ def is_run_trial_component(trial_component_name: str, sagemaker_session: Session
             str(ex),
         )
         return False
+
+
+def verify_type_and_form_of_image(image):
+    """Verify the image object is numpy.ndarray or PIL.Image.Image and check ndarray has valid dimension and channel
+
+    Args:
+        image (numpy.ndarray or PIL.Image.Image): The image object in the form of numpy.ndarray or PIL.Image.Image
+
+    Raises:
+        TypeError: If Image object is not in the supported object format.
+        ValueError: If ndarray object is not in the given dimension or channel.
+    """
+
+    if not isinstance(image, (numpy.ndarray, PIL.Image.Image)):
+        raise TypeError(
+            "Logged Image must be of numpy.ndarray or PIL.Image.Image but found type: {}.".format(type(image))
+        )
+
+    if isinstance(image, numpy.ndarray):
+        if len(image.shape) == 3 and image.shape[2] not in [1, 3, 4]:
+            raise ValueError(
+                "Invalid channel length: {}, Image channel has to be either Grayscale(1) or RGB(3) or RGBA(4)".format(
+                    image.shape[2])
+            )
+        if len(image.shape) < 2 or len(image.shape) > 3:
+            raise ValueError(
+                "Invalid dimension: {}, Image has to be either 2D or 3D ndarray".format(image.ndim)
+            )
+
+
+def verify_type_of_figure_and_name(figure, name):
+    """verify the figure is matplotlib.figure.Figure or plotly.graph_objects.Figure and verify
+        artifact file extension is in supported formats
+
+    Args:
+        figure(matplotlib.figure.Figure, plotly.graph_objects.Figure): the figure object in the form of
+        matplotlib.figure.Figure, plotly.graph_objects.Figure
+        name (str): the name of the artifact file
+
+    Raises:
+        TypeError: If figure is not in the supported object format or if the artifact name not listed in the
+        supported Image formats
+    """
+
+    if not isinstance(figure, (matplotlib.figure.Figure, plotly.graph_objects.Figure)):
+        raise TypeError(
+            "Logged figure must be of matplotlib.figure.Figure or plotly.graph_objects.Figure but found type: {}.".format(
+                type(figure))
+        )
+
+    if name:
+        extension = os.path.splitext(name)[1]
+
+        if type(figure) == matplotlib.figure.Figure:
+            supported_formats = ['.eps', '.jpeg', '.jpg', '.pdf', '.pgf', '.png', '.ps', '.raw', '.rgba', '.svg',
+                                 '.svgz', '.tif', '.tiff', '.webp']
+        elif type(figure) == plotly.graph_objects.Figure:
+            supported_formats = ['.png', '.jpg', '.jpeg', '.webp', '.svg', '.pdf', '.html']
+
+        if extension not in supported_formats:
+            raise TypeError(
+                "Format '{}' is not supported for {} (Supported formats: {})".format(extension[1:],type(figure),supported_formats)
+            )
+
+
+def verify_type_of_text_and_name(text, name):
+    """verify the text is string and verify artifact name extension is in supported formats
+
+    Args:
+        text (str): the text artifact in the form of string
+        name (str): the name of the artifact file
+
+    Raises:
+        TypeError: If text is not in the supported object format or if the artifact name not listed in the
+        supported text formats
+    """
+
+    if not isinstance(text, str):
+        raise TypeError(
+            "Text artifact must be of string but found type: {}. ".format(type(text))
+        )
+
+    if name:
+        extension = os.path.splitext(name)[1]
+
+        supported_formats = ['.txt', '.csv', '.htm', '.html', '.ini', '.log', '.md', '.rtf', '.yaml', '.yml']
+
+        if extension not in supported_formats:
+            raise TypeError(
+                "Format '{}' is not supported (Supported formats: {})".format(extension[1:],supported_formats)
+            )
+
+
+def verify_type_of_table_and_name(table, name):
+    """verify the object is dict or pandas.DataFrame and verify of the name is in supported formats
+
+    Args:
+        table (dict or pandas.DataFrame): the table artifact in the form of dict or pandas.DataFrame
+        name (str): the name of the artifact file
+
+    Raises:
+        TypeError: If table object is not in the supported object format or if the artifact name not listed in
+        the supported json format
+    """
+
+    if not isinstance(table, (dict, pandas.DataFrame)):
+        raise TypeError(
+            "table artifact must be of dictionary or pandas.DataFrame but found type: {}".format(type(table))
+        )
+
+    if name:
+        extension = os.path.splitext(name)[1]
+
+        if extension != '.json':
+            raise TypeError(
+                "Format '{}' is not supported (Supported formats: [.json])".format(extension[1:])
+            )
+
+
+def verify_type_of_dictionary_and_name(dictionary, name):
+    """verify the object is dictionary and verify the name is in supported formats
+
+    Args:
+        dictionary (dict): the artifact in the form of dictionary.
+        name (str): The name of the artifact file
+
+    Raises:
+        TypeError: If dictionary is not in the supported object format or if the artifact name not listed in the
+        supported formats
+    """
+    if not isinstance(dictionary, dict):
+        raise TypeError(
+            "The artifact must be of dictionary but found type: {}.".format(type(dictionary))
+        )
+
+    if name:
+        extension = os.path.splitext(name)[1]
+
+        supported_formats = ['.json', '.yml', '.yaml']
+
+        if extension not in supported_formats:
+            raise TypeError(
+                "Format '{}' is not supported (Supported formats: {})".format(extension[1:], supported_formats)
+            )

@@ -16,7 +16,7 @@ from __future__ import absolute_import
 import json
 import logging
 import os
-
+import io
 import botocore
 
 from sagemaker import s3
@@ -129,6 +129,57 @@ class _ArtifactUploader(object):
         )
         etag = self._try_get_etag(artifact_s3_key)
         return "s3://{}/{}".format(self.artifact_bucket, artifact_s3_key), etag
+
+    def upload_fileobject_artifact(self, artifact_fileobject, artifact_name):
+        """upload an artifact fileobject to S3.
+
+        Args:
+            artifact_fileobject (obj): the file-like object of an artifact.
+            artifact_name (str): the name of the artifact.
+
+        Returns:
+            str: The s3 URI of the uploaded file and the version of the file
+        """
+        # If self.artifact_bucket is falsy, it will be set to sagemaker_session.default_bucket.
+        # In that case, and if sagemaker_session.default_bucket_prefix exists, self.artifact_prefix
+        # needs to be updated too (because not updating self.artifact_prefix would result in
+        # different behavior the 1st time this method is called vs the 2nd).
+        self.artifact_bucket, self.artifact_prefix = s3.determine_bucket_and_prefix(
+            bucket=self.artifact_bucket,
+            key_prefix=self.artifact_prefix,
+            sagemaker_session=self.sagemaker_session,
+        )
+
+        artifact_s3_key = "{}/{}/{}".format(
+            self.artifact_prefix, self.trial_component_name, artifact_name
+        )
+
+        self._s3_client.upload_fileobj(artifact_fileobject, self.artifact_bucket, artifact_s3_key)
+        etag = self._try_get_etag(artifact_s3_key)
+        return "s3://{}/{}".format(self.artifact_bucket, artifact_s3_key), etag
+
+    def download_fileobject_artifact(self, bucket_name, artifact_key):
+        """Download the artifact file-like object from s3
+
+        Args:
+            bucket_name (str): the name of the s3 bucket to download from
+            artifact_key (str): the name of the key to download from
+
+        Returns:
+            file_object: The file-like object downloaded from the s3 bucket
+        """
+
+        file_object = io.BytesIO()
+
+        try:
+            self._s3_client.download_fileobj(bucket_name, artifact_key, file_object)
+
+            file_object.seek(0)
+
+        except botocore.exceptions.ClientError as error:
+            logger.warning("Failed to get artifact file due to: %s.", error)
+
+        return file_object
 
     def _try_get_etag(self, key):
         """Get ETag of given key and return None if not allowed

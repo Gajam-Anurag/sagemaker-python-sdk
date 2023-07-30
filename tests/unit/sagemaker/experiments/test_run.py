@@ -21,6 +21,14 @@ from unittest.mock import patch, Mock, MagicMock
 import dateutil
 import pytest
 
+import numpy as np
+import pandas as pd
+from PIL import Image
+import io
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+import os
+
 from sagemaker.experiments import _environment, SortOrderType
 from sagemaker.experiments._api_types import (
     TrialComponentArtifact,
@@ -855,6 +863,399 @@ def test_log_roc_curve_invalid_input(run_obj):
         with pytest.raises(ValueError) as error:
             run_obj.log_roc_curve(y_true, y_scores, title="TestROCCurve", is_output=False)
         assert "Lengths mismatch between true labels and predicted scores" in str(error)
+
+
+def test_log_image_ndarray(run_obj):
+    ndarray_image = np.random.randint(low=0, high=256, size=(500, 500, 3), dtype=np.uint8)
+
+    mock_byte_io = MagicMock(spec=io.BytesIO)
+
+    with run_obj, patch('io.BytesIO', return_value=mock_byte_io):
+        run_obj._artifact_uploader.upload_fileobject_artifact.return_value = (
+            "s3uri_value",
+            "etag_value",
+        )
+
+        run_obj.log_image(ndarray_image, 'ndarrayimage.png')
+
+        run_obj._artifact_uploader.upload_fileobject_artifact.assert_called_with(
+            mock_byte_io,
+            "ndarrayimage.png"
+        )
+
+        expected_artifact = TrialComponentArtifact(value="s3uri_value", media_type='image/png')
+
+        assert run_obj._trial_component.output_artifacts['ndarrayimage.png'] == expected_artifact
+
+
+def test_log_image_PIL(run_obj):
+    ndarray_image = np.random.randint(low=0, high=256, size=(500, 500, 3), dtype=np.uint8)
+
+    image = Image.fromarray(ndarray_image)
+
+    mock_byte_io = MagicMock(spec=io.BytesIO)
+
+    with run_obj, patch('io.BytesIO', return_value=mock_byte_io):
+        run_obj._artifact_uploader.upload_fileobject_artifact.return_value = (
+            "s3uri_value",
+            "etag_value",
+        )
+
+        run_obj.log_image(image, 'pilimage.png')
+
+        run_obj._artifact_uploader.upload_fileobject_artifact.assert_called_with(
+            mock_byte_io,
+            "pilimage.png"
+        )
+
+        expected_artifact = TrialComponentArtifact(value="s3uri_value", media_type='image/png')
+
+        assert run_obj._trial_component.output_artifacts['pilimage.png'] == expected_artifact
+
+
+def test_log_image_outside_run_context(run_obj):
+    ndarray_image = np.random.randint(low=0, high=256, size=(500, 500, 3), dtype=np.uint8)
+
+    with pytest.raises(RuntimeError) as err:
+        run_obj.log_image(ndarray_image, "ndarrayImage.png", is_output=False)
+    assert "This method should be called inside context of 'with' statement" in str(err)
+
+
+def test_log_image_invalid_input(run_obj):
+    dictionary = {"col1": 1, "col2": 2}
+
+    with run_obj:
+        with pytest.raises(TypeError) as error:
+            run_obj.log_image(dictionary, "dictionary.png", is_output=False)
+        assert f"Logged Image must be of numpy.ndarray or PIL.Image.Image but found type: {type(dictionary)}" in str(
+            error)
+
+
+def test_log_image_invalid_channel(run_obj):
+    ndarray_image = np.random.randint(low=0, high=256, size=(500, 500, 5), dtype=np.uint8)
+
+    with run_obj:
+        with pytest.raises(ValueError) as error:
+            run_obj.log_image(ndarray_image, "image.png", is_output=False)
+
+        assert f"Invalid channel length: {ndarray_image.shape[2]}, Image channel has to be either Grayscale(1) or RGB(3) or RGBA(4)" in str(
+            error)
+
+
+def test_log_image_invalid_dimension(run_obj):
+    ndarray_image = np.random.randint(low=0, high=256, size=(100, 100, 3, 2), dtype=np.uint8)
+
+    with run_obj:
+        with pytest.raises(ValueError) as error:
+            run_obj.log_image(ndarray_image, "image.png", is_output=False)
+
+        print(1, str(error))
+
+        assert f"Invalid dimension: {ndarray_image.ndim}, Image has to be either 2D or 3D ndarray" in str(error)
+
+
+def test_log_figure_matplotlib(run_obj):
+    x = np.random.rand(100)
+    y = np.random.rand(100)
+
+    fig, ax = plt.subplots()
+
+    ax.plot(x, y)
+
+    mock_byte_io = MagicMock(spec=io.BytesIO)
+
+    with run_obj, patch('io.BytesIO', return_value=mock_byte_io):
+        run_obj._artifact_uploader.upload_fileobject_artifact.return_value = (
+            "s3uri_value",
+            "etag_value",
+        )
+
+        run_obj.log_figure(fig, 'lineplot.png')
+
+        run_obj._artifact_uploader.upload_fileobject_artifact.assert_called_with(
+            mock_byte_io,
+            "lineplot.png"
+        )
+
+        expected_artifact = TrialComponentArtifact(value="s3uri_value", media_type='image/png')
+
+        assert run_obj._trial_component.output_artifacts['lineplot.png'] == expected_artifact
+
+
+def test_log_figure_ploty(run_obj):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=[1, 2, 3], y=[4, 5, 6]))
+
+    mock_byte_io = MagicMock(spec=io.BytesIO)
+
+    with run_obj, patch('io.BytesIO', return_value=mock_byte_io):
+        run_obj._artifact_uploader.upload_fileobject_artifact.return_value = (
+            "s3uri_value",
+            "etag_value",
+        )
+
+        run_obj.log_figure(fig, 'scatterplot.png')
+
+        run_obj._artifact_uploader.upload_fileobject_artifact.assert_called_with(
+            mock_byte_io,
+            "scatterplot.png"
+        )
+
+        expected_artifact = TrialComponentArtifact(value="s3uri_value", media_type='image/png')
+
+        assert run_obj._trial_component.output_artifacts['scatterplot.png'] == expected_artifact
+
+
+def test_log_figure_outside_run_context(run_obj):
+    x = np.random.rand(100)
+    y = np.random.rand(100)
+
+    fig, ax = plt.subplots()
+
+    ax.plot(x, y)
+
+    with pytest.raises(RuntimeError) as err:
+        run_obj.log_figure(fig, "lineplot.png", is_output=False)
+    assert "This method should be called inside context of 'with' statement" in str(err)
+
+
+def test_log_figure_invalid_input(run_obj):
+    image = np.random.randint(0, 256, (200, 200, 3), dtype=np.uint8)
+
+    with run_obj:
+        with pytest.raises(TypeError) as error:
+            run_obj.log_figure(image, "image.png", is_output=False)
+        assert f"Logged figure must be of matplotlib.figure.Figure or plotly.graph_objects.Figure but found type: {type(image)}." in str(
+            error)
+
+
+def test_log_figure_invalid_file_format_for_matplotlib(run_obj):
+    x = np.random.rand(100)
+    y = np.random.rand(100)
+
+    fig, ax = plt.subplots()
+
+    ax.plot(x, y)
+
+    with run_obj:
+        with pytest.raises(TypeError) as error:
+            run_obj.log_figure(fig, "image.txt", is_output=False)
+        extension = os.path.splitext('image.txt')[1]
+
+        assert f"Format '{extension[1:]}' is not supported for {type(fig)} (Supported formats: ['.eps', '.jpeg', '.jpg', '.pdf', '.pgf', '.png', '.ps', '.raw', '.rgba', '.svg', '.svgz', '.tif', '.tiff', '.webp']" in str(
+            error)
+
+
+def test_log_figure_invalid_file_format_for_plotly(run_obj):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=[1, 2, 3], y=[4, 5, 6]))
+
+    with run_obj:
+        with pytest.raises(TypeError) as error:
+            run_obj.log_figure(fig, "image.txt", is_output=False)
+        extension = os.path.splitext('image.txt')[1]
+
+        assert f"Format '{extension[1:]}' is not supported for {type(fig)} (Supported formats: ['.png', '.jpg', '.jpeg', '.webp', '.svg', '.pdf', '.html']" in str(
+            error)
+
+
+def test_log_text(run_obj):
+    random_string = 'This logging method is used to log the string and store it in s3'
+
+    mock_byte_io = MagicMock(spec=io.BytesIO)
+
+    with run_obj, patch('io.BytesIO', return_value=mock_byte_io):
+        run_obj._artifact_uploader.upload_fileobject_artifact.return_value = (
+            "s3uri_value",
+            "etag_value",
+        )
+
+        run_obj.log_text(random_string, 'sample.txt')
+
+        run_obj._artifact_uploader.upload_fileobject_artifact.assert_called_with(
+            mock_byte_io,
+            "sample.txt"
+        )
+
+        expected_artifact = TrialComponentArtifact(value="s3uri_value", media_type='text/plain')
+
+        assert run_obj._trial_component.output_artifacts['sample.txt'] == expected_artifact
+
+
+def test_log_text_outside_of_run_context(run_obj):
+    random_string = 'This logging method is used to log the string and store it in s3'
+
+    with pytest.raises(RuntimeError) as err:
+        run_obj.log_text(random_string, "sample.txt", is_output=False)
+    assert "This method should be called inside context of 'with' statement" in str(err)
+
+
+def test_log_text_invalid_input(run_obj):
+    image = np.random.randint(0, 256, (200, 200, 3), dtype=np.uint8)
+
+    with run_obj:
+        with pytest.raises(TypeError) as error:
+            run_obj.log_text(image, "sample.txt", is_output=False)
+        assert f"Text artifact must be of string but found type: {type(image)}." in str(error)
+
+
+def test_log_text_invalid_file_format(run_obj):
+    random_string = 'This logging method is used to log the string and store it in s3'
+
+    with run_obj:
+        with pytest.raises(TypeError) as error:
+            run_obj.log_text(random_string, "sample.png", is_output=False)
+
+        extension = os.path.splitext('sample.png')[1]
+
+        assert f"Format '{extension[1:]}' is not supported (Supported formats: ['.txt', '.csv', '.htm', '.html', '.ini', '.log', '.md', '.rtf', '.yaml', '.yml']" in str(
+            error)
+
+
+def test_log_table_dictionary(run_obj):
+    dictionary = {"x": [1, 2, 3], "y": [1, 2, 3]}
+
+    file_object = io.BytesIO()
+
+    with run_obj, patch('io.BytesIO', return_value=file_object):
+        run_obj._artifact_uploader.upload_fileobject_artifact.return_value = (
+            "s3uri_value",
+            "etag_value",
+        )
+
+        run_obj.log_table(dictionary, 'dictionary.json')
+
+        run_obj._artifact_uploader.upload_fileobject_artifact.assert_called_with(
+            file_object,
+            "dictionary.json"
+        )
+
+        expected_artifact = TrialComponentArtifact(value="s3uri_value", media_type='application/json')
+
+        assert run_obj._trial_component.output_artifacts['dictionary.json'] == expected_artifact
+
+
+def test_log_table_dataframe(run_obj):
+    dataframe = pd.DataFrame({'name': ['Alice', 'Bob'], 'age': [25, 30]})
+
+    file_object = io.BytesIO()
+
+    with run_obj, patch('io.BytesIO', return_value=file_object):
+        run_obj._artifact_uploader.upload_fileobject_artifact.return_value = (
+            "s3uri_value",
+            "etag_value",
+        )
+
+        run_obj.log_table(dataframe, 'dataframe.json')
+
+        run_obj._artifact_uploader.upload_fileobject_artifact.assert_called_with(
+            file_object,
+            "dataframe.json"
+        )
+
+        expected_artifact = TrialComponentArtifact(value="s3uri_value", media_type='application/json')
+
+        assert run_obj._trial_component.output_artifacts['dataframe.json'] == expected_artifact
+
+
+def test_log_table_outside_run_context(run_obj):
+    dictionary = {"x": [1, 2, 3], "y": [1, 2, 3]}
+
+    with pytest.raises(RuntimeError) as err:
+        run_obj.log_table(dictionary, "dictionary.json", is_output=False)
+    assert "This method should be called inside context of 'with' statement" in str(err)
+
+
+def test_log_table_invalid_input(run_obj):
+    image = np.random.randint(0, 256, (200, 200, 3), dtype=np.uint8)
+
+    with run_obj:
+        with pytest.raises(TypeError) as error:
+            run_obj.log_table(image, "image.json", is_output=False)
+        assert f"table artifact must be of dictionary or pandas.DataFrame but found type: {type(image)}" in str(
+            error)
+
+
+def test_log_table_invalid_file_format(run_obj):
+    dictionary = {"x": [1, 2, 3], "y": [1, 2, 3]}
+
+    with run_obj:
+        with pytest.raises(TypeError) as error:
+            run_obj.log_table(dictionary, "dictionary.png", is_output=False)
+
+        extension = os.path.splitext('dictionary.png')[1]
+
+        assert f"Format '{extension[1:]}' is not supported (Supported formats: [.json])" in str(error)
+
+
+def test_log_dict(run_obj):
+    model_config = {
+        "model_type": "Random Forest",
+        "parameters": {
+            "n_estimators": 100,
+            "max_depth": 5
+        }
+    }
+
+    mock_byte_io = MagicMock(spec=io.BytesIO)
+
+    with run_obj, patch('io.BytesIO', return_value=mock_byte_io):
+        run_obj._artifact_uploader.upload_fileobject_artifact.return_value = (
+            "s3uri_value",
+            "etag_value",
+        )
+
+        run_obj.log_dict(model_config, 'config.json')
+
+        run_obj._artifact_uploader.upload_fileobject_artifact.assert_called_with(
+            mock_byte_io,
+            "config.json"
+        )
+
+        expected_artifact = TrialComponentArtifact(value="s3uri_value", media_type='application/json')
+
+        assert run_obj._trial_component.output_artifacts['config.json'] == expected_artifact
+
+
+def test_log_dict_outside_run_context(run_obj):
+    model_config = {
+        "model_type": "Random Forest",
+        "parameters": {
+            "n_estimators": 100,
+            "max_depth": 5
+        }
+    }
+
+    with pytest.raises(RuntimeError) as err:
+        run_obj.log_dict(model_config, "model_config.json", is_output=False)
+    assert "This method should be called inside context of 'with' statement" in str(err)
+
+
+def test_log_dict_invalid_input(run_obj):
+    image = np.random.randint(0, 256, (200, 200, 3), dtype=np.uint8)
+
+    with run_obj:
+        with pytest.raises(TypeError) as error:
+            run_obj.log_dict(image, "image.json", is_output=False)
+        assert f"The artifact must be of dictionary but found type: {type(image)}" in str(error)
+
+
+def test_log_dict_invalid_file_format(run_obj):
+    model_config = {
+        "model_type": "Random Forest",
+        "parameters": {
+            "n_estimators": 100,
+            "max_depth": 5
+        }
+    }
+
+    with run_obj:
+        with pytest.raises(TypeError) as error:
+            run_obj.log_dict(model_config, "model_config.txt", is_output=False)
+
+        extension = os.path.splitext("model_config.txt")[1]
+
+        assert f"Format '{extension[1:]}' is not supported (Supported formats: ['.json', '.yml', '.yaml']" in str(error)
 
 
 @patch(

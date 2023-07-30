@@ -23,6 +23,17 @@ from typing import Optional, List, Dict, TYPE_CHECKING, Union
 import dateutil
 from numpy import array
 
+import os
+import numpy
+from PIL import Image
+import matplotlib.figure
+import plotly.graph_objects
+import plotly.io as pio
+import io
+import yaml
+import json
+import pandas
+
 from sagemaker.apiutils import _utils
 from sagemaker.experiments import _api_types
 from sagemaker.experiments._api_types import (
@@ -54,6 +65,11 @@ from sagemaker.experiments._utils import (
     get_tc_and_exp_config_from_job_env,
     verify_load_input_names,
     is_run_trial_component,
+    verify_type_and_form_of_image,
+    verify_type_of_figure_and_name,
+    verify_type_of_text_and_name,
+    verify_type_of_dictionary_and_name,
+    verify_type_of_table_and_name
 )
 
 if TYPE_CHECKING:
@@ -72,6 +88,11 @@ DELIMITER = "-"
 RUN_TC_TAG_KEY = "sagemaker:trial-component-source"
 RUN_TC_TAG_VALUE = "run"
 RUN_TC_TAG = {"Key": RUN_TC_TAG_KEY, "Value": RUN_TC_TAG_VALUE}
+IMAGE_NAME_BASE = "Logged-Image".lower()
+FIGURE_NAME_BASE = "Logged-Figure".lower()
+TEXT_NAME_BASE = "Logged-Text".lower()
+TABLE_NAME_BASE = "Logged-Table".lower()
+DICT_NAME_BASE = "Logged-Dict".lower()
 
 
 class SortByType(Enum):
@@ -530,6 +551,265 @@ class Run(object):
                 value=s3_uri, media_type=media_type
             )
 
+    @validate_invoked_inside_run_context
+    def log_image(
+            self,
+            image: Union[numpy.ndarray, Image.Image],
+            name: Optional[str] = None,
+            media_type: Optional[str] = None,
+            is_output: bool = True,
+    ):
+        """Upload image artifact to s3 and store it as an input/ouput artifact in this run.
+
+        Args:
+            image (numpy.ndarray or PIL.Image.Image): The type of object to upload as file to s3
+            name (str): The name of the artifact (default: None)
+            media_type (str): The MediaType (MIME type) of the file.
+                If not specified, this library will attempt to infer the media type
+                from the file extension of ``name``
+                If name not specified, it will default to image/png.
+            is_output (bool): Determines direction of association to the
+                run. Defaults to True (output artifact).
+                If set to False then represented as input association.
+
+        """
+
+        verify_type_and_form_of_image(image)
+
+        self._verify_trial_component_artifacts_length(is_output)
+        name = name or unique_name_from_base(IMAGE_NAME_BASE) + '.png'
+        media_type = media_type or guess_media_type(name)
+        extension = os.path.splitext(name)[1]
+
+        if isinstance(image, numpy.ndarray):
+            if image.ndim == 3 and image.shape[2] == 1:
+                image = numpy.squeeze(image)
+
+            image = self._array_to_uint8(image)
+
+            image = Image.fromarray(image)
+
+        file_object = io.BytesIO()
+        image.save(file_object, extension[1:])
+        file_object.seek(0)
+
+        s3_uri, _ = self._artifact_uploader.upload_fileobject_artifact(file_object, name)
+
+        if is_output:
+            self._trial_component.output_artifacts[name] = TrialComponentArtifact(
+                value=s3_uri, media_type=media_type
+            )
+        else:
+            self._trial_component.input_artifacts[name] = TrialComponentArtifact(
+                value=s3_uri, media_type=media_type
+            )
+
+    @validate_invoked_inside_run_context
+    def log_figure(
+            self,
+            figure: Union[matplotlib.figure.Figure, plotly.graph_objects.Figure],
+            name: Optional[str] = None,
+            media_type: Optional[str] = None,
+            is_output: bool = True,
+
+    ):
+        """upload figure artifact to s3 and store it as an input/output artifact in this run.
+
+        Args:
+            figure (matplotlib.figure.Figure, plotly.graph_objects.Figure): The type of object to upload as file to s3
+            name (str): The name of the artifact (default: None)
+            media_type (str): The MediaType (MIME type) of the file.
+                If not specified, this library will attempt to infer the media type
+                from the file extension of ``name``
+                If name not specified, it will default to image/png.
+            is_output (bool): Determines direction of association to the
+                run. Defaults to True (output artifact).
+                If set to False then represented as input association.
+        """
+
+        verify_type_of_figure_and_name(figure, name)
+
+        self._verify_trial_component_artifacts_length(is_output)
+        name = name or unique_name_from_base(FIGURE_NAME_BASE) + '.png'
+        media_type = media_type or guess_media_type(name)
+        extension = os.path.splitext(name)[1]
+
+        file_object = io.BytesIO()
+
+        if type(figure) == matplotlib.figure.Figure:
+            figure.savefig(file_object, format=extension[1:])
+        elif type(figure) == plotly.graph_objects.Figure:
+            if extension == '.html':
+                html_string = pio.to_html(figure)
+                file_object = io.BytesIO(html_string.encode('utf-8'))
+            else:
+                figure.write_image(file_object, format=extension[1:])
+
+        file_object.seek(0)
+
+        s3_uri, _ = self._artifact_uploader.upload_fileobject_artifact(file_object, name)
+
+        if is_output:
+            self._trial_component.output_artifacts[name] = TrialComponentArtifact(
+                value=s3_uri, media_type=media_type
+            )
+        else:
+            self._trial_component.input_artifacts[name] = TrialComponentArtifact(
+                value=s3_uri, media_type=media_type
+            )
+
+    @validate_invoked_inside_run_context
+    def log_text(
+            self,
+            text: str,
+            name: Optional[str] = None,
+            media_type: Optional[str] = None,
+            is_output: bool = True
+    ):
+        """Upload text artifact to s3 and store it as an input/output artifact in this run.
+
+        Args:
+            text (str): The type of object to upload as file to s3
+            name (str): The name of the artifact (default: None)
+            media_type (str): The MediaType (MIME type) of the file.
+                If not specified, this library will attempt to infer the media type
+                from the file extension of ``name``
+                If name not specified, it will default to text/plain.
+            is_output (bool): Determines direction of association to the
+                run. Defaults to True (output artifact).
+                If set to False then represented as input association.
+        """
+
+        verify_type_of_text_and_name(text, name)
+
+        self._verify_trial_component_artifacts_length(is_output)
+        name = name or unique_name_from_base(TEXT_NAME_BASE) + '.txt'
+        media_type = media_type or guess_media_type(name)
+
+        file_object = io.BytesIO(text.encode('utf-8'))
+
+        file_object.seek(0)
+
+        s3_uri, _ = self._artifact_uploader.upload_fileobject_artifact(file_object, name)
+
+        if is_output:
+            self._trial_component.output_artifacts[name] = TrialComponentArtifact(
+                value=s3_uri, media_type=media_type
+            )
+        else:
+            self._trial_component.input_artifacts[name] = TrialComponentArtifact(
+                value=s3_uri, media_type=media_type
+            )
+
+    @validate_invoked_inside_run_context
+    def log_table(
+            self,
+            table: Union[dict, pandas.DataFrame],
+            name: Optional[str] = None,
+            media_type: Optional[str] = None,
+            is_output: bool = True
+    ):
+        """Upload table artifact to s3 and store it as an input/output artifact in this run
+
+        Args:
+            table (dict, pandas.DataFrame): The type of object to upload as file to s3
+            name (str): The name of the artifact (default: None)
+            media_type (str): The MediaType (MIME type) of the file.
+                If not specified, this library will attempt to infer the media type
+                from the file extension of ``name``
+                If name not specified, it will default to application/json.
+            is_output (bool): Determines direction of association to the
+                run. Defaults to True (output artifact).
+                If set to False then represented as input association.
+        """
+
+        verify_type_of_table_and_name(table, name)
+
+        self._verify_trial_component_artifacts_length(is_output)
+        name = name or unique_name_from_base(TABLE_NAME_BASE) + '.json'
+        media_type = media_type or guess_media_type(name)
+
+        dataFrame = pandas.DataFrame(table)
+        s3_uri = ""
+
+        if is_output:
+            if name in self._trial_component.output_artifacts.keys():
+                s3_uri = self._trial_component.output_artifacts[name].value
+        else:
+            if name in self._trial_component.input_artifacts.keys():
+                s3_uri = self._trial_component.input_artifacts[name].value
+
+        if s3_uri:
+            s3_bucket, s3_key = s3_uri.replace("s3://", "").split("/", 1)
+            file_object = self._artifact_uploader.download_fileobject_artifact(s3_bucket, s3_key)
+
+            if file_object.getbuffer().nbytes > 0:
+                existing_data = pandas.read_json(file_object, orient='split')
+                dataFrame = pandas.concat([existing_data, dataFrame], ignore_index=True)
+
+        file_object = io.BytesIO()
+        dataFrame.to_json(file_object, orient='split', index=False)
+        file_object.seek(0)
+
+        s3_uri, _ = self._artifact_uploader.upload_fileobject_artifact(file_object, name)
+
+        if is_output:
+            self._trial_component.output_artifacts[name] = TrialComponentArtifact(
+                value=s3_uri, media_type=media_type
+            )
+        else:
+            self._trial_component.input_artifacts[name] = TrialComponentArtifact(
+                value=s3_uri, media_type=media_type
+            )
+
+    @validate_invoked_inside_run_context
+    def log_dict(
+            self,
+            dictionary: dict,
+            name: Optional[str] = None,
+            media_type: Optional[str] = None,
+            is_output: bool = True
+    ):
+        """Upload JSON/YAML-serializable object as an artifact to s3 and store it is as an input/output artifact.
+
+        Args:
+            dictionary (dict): The type of object to upload to s3
+            name (str): The name of the artifact (default: None)
+            media_type (str): The MediaType (MIME type) of the file.
+                If not specified, this library will attempt to infer the media type
+                from the file extension of ``name``
+                If name not specified, it will default to application/json.
+            is_output (bool): Determines direction of association to the
+                run. Defaults to True (output artifact).
+                If set to False then represented as input association.
+        """
+
+        verify_type_of_dictionary_and_name(dictionary, name)
+
+        self._verify_trial_component_artifacts_length(is_output)
+        name = name or unique_name_from_base(DICT_NAME_BASE) + '.json'
+        media_type = media_type or guess_media_type(name)
+
+        extension = os.path.splitext(name)[1]
+
+        if extension in ['.yml', '.yaml']:
+            yaml_bytes = yaml.dump(dictionary).encode('utf-8')
+            file_object = io.BytesIO(yaml_bytes)
+        elif extension == '.json':
+            json_bytes = json.dumps(dictionary).encode('utf-8')
+            file_object = io.BytesIO(json_bytes)
+
+        s3_uri, _ = self._artifact_uploader.upload_fileobject_artifact(file_object, name)
+
+        if is_output:
+            self._trial_component.output_artifacts[name] = TrialComponentArtifact(
+                value=s3_uri, media_type=media_type
+            )
+        else:
+            self._trial_component.input_artifacts[name] = TrialComponentArtifact(
+                value=s3_uri, media_type=media_type
+            )
+
     def close(self):
         """Persist any data saved locally."""
         try:
@@ -626,6 +906,40 @@ class Run(object):
         else:
             if len(self._trial_component.input_artifacts) >= MAX_RUN_TC_ARTIFACTS_LEN:
                 raise ValueError(err_msg_template.format(MAX_RUN_TC_ARTIFACTS_LEN, "input"))
+
+    def _array_to_uint8(self, image):
+        """Normalize the ndarray image to uint8
+
+        Args:
+            image(ndarray): The image object in the form of numpy.ndarray
+
+        Returns:
+            Normalized image object to uint8
+        """
+
+        # Reference1: https://github.com/matplotlib/matplotlib/blob/06567e021f21be046b6d6dcf00380c1cb9adaf3c/lib/matplotlib/image.py#L684
+
+        is_int = numpy.issubdtype(image.dtype, numpy.integer)
+
+        low = 0
+        high = 255 if is_int else 1
+
+        # # standard digital Image format is unit8 which is to ensure data is in given range [0,255]. # Reference2
+        # PNG: https://www.w3.org/TR/png/#table111 # Reference3 PNG:
+        # https://github.com/python-pillow/Pillow/blob/7bf5246b93cc89cfb9d6cca78c4719a943b10585/src/PIL
+        # /PngImagePlugin.py#L693-L708
+        if image.min() < low or image.max() > high:
+            logging.warning("ndarray values are identified that exceed acceptable range,"
+                            " clipping range [0,1] for floats or [0,255] for integers")
+
+            image = numpy.clip(image, low, high)
+
+        # rescale the values [0,1] to [0,255] as PIL interprets the floating points in a given range
+        # and would appear almost black as they are less than 1 which leads to data error.
+        if not is_int:
+            image *= 255
+
+        return image.astype(numpy.uint8)
 
     @staticmethod
     def _generate_trial_component_name(run_name: str, experiment_name: str) -> str:
