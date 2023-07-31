@@ -223,7 +223,7 @@ def is_run_trial_component(trial_component_name: str, sagemaker_session: Session
 
 
 def verify_type_and_form_of_image(image):
-    """Verify the image object is numpy.ndarray or PIL.Image.Image and check ndarray has valid dimension and channel
+    """Verify object is ndarray or PIL.Image.Image and ndarray has valid dimension and channel
 
     Args:
         image (numpy.ndarray or PIL.Image.Image): An Image object of type ndarray or PIL
@@ -252,7 +252,7 @@ def verify_type_and_form_of_image(image):
 
 
 def verify_type_of_figure_and_name(figure, name):
-    """Verify the figure is matplotlib or plotly Figure and verify artifact file extension in supported formats
+    """Verify object is matplotlib or plotly Figure and verify file extension in supported formats
 
     Args:
         figure(matplotlib.figure.Figure, plotly.graph_objects.Figure): the figure object of type
@@ -317,7 +317,7 @@ def verify_type_of_text_and_name(text, name):
 
 
 def verify_type_of_table_and_name(table, name):
-    """Verify the object is dict or pandas.DataFrame and verify artifact file extension in supported formats
+    """Verify object is dict or DataFrame and verify file extension in supported formats
 
     Args:
         table (dict or pandas.DataFrame): the table artifact of type dict or pandas.DataFrame
@@ -344,7 +344,7 @@ def verify_type_of_table_and_name(table, name):
 
 
 def verify_type_of_dictionary_and_name(dictionary, name):
-    """Verify the object is dictionary and verify the artifact file extension in supported formats
+    """Verify object is dictionary and verify the artifact file extension in supported formats
 
     Args:
         dictionary (dict): the artifact in the form of dictionary.
