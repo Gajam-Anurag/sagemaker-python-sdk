@@ -131,7 +131,7 @@ class _ArtifactUploader(object):
         return "s3://{}/{}".format(self.artifact_bucket, artifact_s3_key), etag
 
     def upload_fileobject_artifact(self, artifact_fileobject, artifact_name):
-        """upload an artifact fileobject to S3.
+        """Upload an artifact fileobject to S3.
 
         Args:
             artifact_fileobject (obj): the file-like object of an artifact.

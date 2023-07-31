@@ -25,6 +25,7 @@ import json
 import dateutil
 from numpy import array
 
+
 import numpy
 from PIL import Image
 import matplotlib.figure
@@ -612,11 +613,11 @@ class Run(object):
             is_output: bool = True,
 
     ):
-        """upload figure artifact to s3 and store it as an input/output artifact in this run.
+        """Upload figure artifact to s3 and store it as an input/output artifact in this run.
 
         Args:
-            figure (matplotlib.figure.Figure, plotly.graph_objects.Figure): 
-            The type of object to upload as file to s3
+            figure (matplotlib.figure.Figure, plotly.graph_objects.Figure):
+                    The type of object to upload as file to s3
             name (str): The name of the artifact (default: None)
             media_type (str): The MediaType (MIME type) of the file.
                 If not specified, this library will attempt to infer the media type
@@ -770,8 +771,7 @@ class Run(object):
             media_type: Optional[str] = None,
             is_output: bool = True
     ):
-        """Upload JSON/YAML-serializable object as an artifact to s3 
-           and store it is as an input/output artifact.
+        """Upload JSON/YAML-serializable object as an artifact to s3 and store it is as an input/output artifact.
 
         Args:
             dictionary (dict): The type of object to upload to s3
@@ -918,20 +918,16 @@ class Run(object):
             Normalized image object to uint8
         """
 
-        # Reference1: https://github.com/matplotlib/matplotlib/blob/06567e021f21be046b6d6dcf00380c1cb9adaf3c/
-        #             lib/matplotlib/image.py#L684
+        # Reference1: https://github.com/matplotlib/matplotlib/blob/06567e021f21be046b6d6dcf00380c1cb9adaf3c/lib/matplotlib/image.py#L684
 
         is_int = numpy.issubdtype(image.dtype, numpy.integer)
 
         low = 0
         high = 255 if is_int else 1
 
-        # standard digital Image format is unit8 which is to ensure data is in given range [0,255]. 
-        # Reference2
-        # PNG: https://www.w3.org/TR/png/#table111 
-        # Reference3 PNG:
-        # https://github.com/python-pillow/Pillow/blob/7bf5246b93cc89cfb9d6cca78c4719a943b10585/src/PIL
-        # /PngImagePlugin.py#L693-L708
+        # standard digital Image format is unit8 which is to ensure data is in given range [0,255]
+        # Reference2 PNG: https://www.w3.org/TR/png/#table111
+        # Reference3 PNG: https://github.com/python-pillow/Pillow/blob/7bf5246b93cc89cfb9d6cca78c4719a943b10585/src/PIL/PngImagePlugin.py#L693-L708
         if image.min() < low or image.max() > high:
             logging.warning("ndarray values are identified that exceed acceptable range,"
                             " clipping range [0,1] for floats or [0,255] for integers")
