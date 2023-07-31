@@ -21,7 +21,6 @@ import pytest
 
 import numpy as np
 from PIL import Image
-import matplotlib
 import plotly.express as px
 import pandas as pd
 
